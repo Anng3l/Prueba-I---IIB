@@ -82,8 +82,18 @@ class AuthGate extends StatelessWidget {
         return FutureBuilder(
           future: getProfilesRole(context, userId), 
           builder: (context, snapshot) {
+//            return const Padding(padding: EdgeInsetsGeometry.all(30), child: CircularProgressIndicator(),);
+            
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const CircularProgressIndicator();
+            }
+            else if (snapshot.hasError)
+            {
+              return Text("Error: ${snapshot.error}");
+            }
+            else
+            {
+              return const Text("Perfil cargado correctamente");
             }
           }
         );      
