@@ -1,16 +1,45 @@
-# archivos_app
+# 🌍 Blog Turístico – Flutter + Supabase
 
-A new Flutter project.
+Una aplicación móvil desarrollada con Flutter que permite a los usuarios explorar y publicar reseñas sobre sitios turísticos. Utiliza **Supabase** como backend completo: autenticación, base de datos y almacenamiento de archivos.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 🚀 Funcionalidades principales
 
-A few resources to get you started if this is your first Flutter project:
+### 👥 Autenticación de usuarios
+- Registro e inicio de sesión de usuarios.
+- Gestión de sesiones con Supabase Auth.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### 🧑‍💼 Roles de usuario
+- **Visitante**: Puede leer reseñas y dejar comentarios.
+- **Publicador**: Puede además crear nuevas reseñas.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+
+### 📝 Publicación de entradas
+- Publicadores pueden redactar entradas tipo blog o microblog sobre sitios turísticos.
+- Soporte para campos como lugar, descripción, coordenadas y fotografías.
+
+
+### 📸 Subida de imágenes
+- Se pueden seleccionar múltiples imágenes desde el almacenamiento local.
+- Se permite únicamente la subida de imágenes de hasta **2MB**.
+- Las imágenes son almacenadas en un bucket de Supabase Storage.
+
+
+---
+
+## 🧰 Tecnologías utilizadas
+
+- **Flutter** – Framework para la app móvil.
+- **Supabase** – Backend completo (Auth, DB, Storage).
+
+---
+
+
+## Permisos de la aplicación
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+
