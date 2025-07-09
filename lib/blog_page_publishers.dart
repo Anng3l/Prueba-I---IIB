@@ -14,14 +14,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:uuid/uuid.dart';
 
-class BlogPage extends StatefulWidget {
-  const BlogPage({super.key});
+class PublisherBlogPage extends StatefulWidget {
+  const PublisherBlogPage({super.key});
 
   @override
-  State<BlogPage> createState() => _PublisherBlogPageState();
+  State<PublisherBlogPage> createState() => _PublisherBlogPageState();
 }
 
-class _PublisherBlogPageState extends State<BlogPage> {
+class _PublisherBlogPageState extends State<PublisherBlogPage> {
   final supabase = Supabase.instance.client;
   late Future<List<Map<String, dynamic>>> _entriesFuture;
 
@@ -70,6 +70,7 @@ class _PublisherBlogPageState extends State<BlogPage> {
           profile['id'].toString(): profile
       };
 
+      // 3. Combinar datos
       return entries.map((entry) {
         final userId = entry['user_id']?.toString();
         return {
@@ -159,8 +160,19 @@ class _PublisherBlogPageState extends State<BlogPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Blog del Visitante"),
+        title: const Text("Blog del Publicador"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: "Nueva publicación",
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NewEntryPage()),
+              );
+              _refreshEntries();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: "Actualizar publicaciones",
@@ -206,6 +218,15 @@ class _PublisherBlogPageState extends State<BlogPage> {
                   children: [
                     const Text("No hay publicaciones aún"),
                     const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const NewEntryPage()),
+                        ).then((_) => _refreshEntries());
+                      },
+                      child: const Text("Crear primera publicación"),
+                    ),
                   ],
                 ),
               );
@@ -661,3 +682,322 @@ class _CommentSectionState extends State<CommentSection> {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class NewEntryPage extends StatefulWidget {
+  const NewEntryPage({super.key});
+
+  @override
+  State<NewEntryPage> createState() => _NewEntryPageState();
+}
+
+class _NewEntryPageState extends State<NewEntryPage> {
+  final _descController = TextEditingController();
+  final _lugarController = TextEditingController();
+  final _coordXController = TextEditingController();
+  final _coordYController = TextEditingController();
+
+  final List<File> _images = [];
+  final _uuid = const Uuid();
+  final supabase = Supabase.instance.client;
+
+  Future<File> _compressImage(File file) async {
+    final result = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      '${file.path}_compressed.jpg',
+      quality: 70,
+    );
+    return File(result!.path);
+  }
+
+  Future<void> _pickImages(BuildContext context) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.image,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final newImages = <File>[];
+        
+        for (final platformFile in result.files) {
+          try {
+            // Imágenes sólo de hasta 2MB
+            if (platformFile.size > 2 * 1024 * 1024) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("La imagen '${platformFile.name}' supera los 2MB.")),
+                );
+              }
+              continue; // saltar este archivo
+            }
+
+            if (platformFile.path != null) {
+              final file = File(platformFile.path!);
+              // Comprimir solo imágenes mayores a 500KB
+              final compressedFile = platformFile.size > 500 * 1024
+                  ? await _compressImage(file)
+                  : file;
+              newImages.add(compressedFile);
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Error al procesar: ${platformFile.name}")),
+              );
+            }
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _images.addAll(newImages);
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Error al seleccionar imágenes")),
+        );
+      }
+    }
+  }
+
+  Future<void> _submit(BuildContext context) async 
+  {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final response = await Supabase.instance.client
+                          .from("profiles")
+                          .select("nombre")
+                          .eq("id", user.id)
+                          .single();
+    final nombre = response["nombre"] as String;
+
+    final desc = _descController.text.trim();
+    final lugar = _lugarController.text.trim();
+    final xStr = _coordXController.text.trim();
+    final yStr = _coordYController.text.trim();
+    final x = double.tryParse(xStr);
+    final y = double.tryParse(yStr);
+
+    if (desc.isEmpty || _images.isEmpty || lugar.isEmpty || x == null || y == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completa todos los campos correctamente')),
+      );
+      return;
+    }
+
+    final entryId = _uuid.v4();
+    final List<String> imageUrls = []; // Lista para almacenar URLs
+
+    final List<Future<String>> uploadTasks = [];
+    // 1. Subir imágenes y obtener URLs
+    for (final image in _images) {
+      final fileExt = extension(image.path);
+      final fileName = '${_uuid.v4()}$fileExt';
+      final filePath = 'entries/$entryId/$fileName';
+
+      uploadTasks.add(() async {
+        try {
+          // Subir imagen
+          await supabase.storage
+              .from('entries')
+              .uploadBinary(filePath, await image.readAsBytes());
+
+          // Obtener URL pública
+          final publicUrl = supabase.storage
+              .from('entries')
+              .getPublicUrl(filePath);
+
+          imageUrls.add(publicUrl); // Guardar URL en la lista
+
+          return publicUrl;
+        }
+        catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al subir imagen: ${e.toString()}')),
+          );
+          rethrow;
+        }
+      }());
+    }
+    
+    try
+    {
+      final imageUrls = await Future.wait(uploadTasks);
+        await supabase.from('entries').insert({
+        'id': entryId,
+        "author": nombre,
+        'user_id': user.id,
+        'description': desc,
+        'lugar': lugar,
+        'coordenadax': x,
+        'coordenaday': y,
+        'images': imageUrls,
+      });
+
+      Navigator.pop(context);
+    }
+    catch(e)
+    {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al registrar la nueva reseña '${e}'"))
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _descController.dispose();
+    _lugarController.dispose();
+    _coordXController.dispose();
+    _coordYController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Nueva publicación')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            TextField(
+              controller: _descController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Descripción',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _lugarController,
+              decoration: const InputDecoration(
+                labelText: 'Lugar',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _coordXController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Coordenada X',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _coordYController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Coordenada Y',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => _pickImages(context),
+              icon: const Icon(Icons.photo_library),
+              label: const Text("Seleccionar imágenes"),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _images.map((file) => _buildImageThumbnail(file)).toList(),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () async {
+                await _submit(context);
+              },
+              child: const Text("Publicar"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageThumbnail(File file) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            file,
+            width: 100,
+            height: 100,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              width: 100,
+              height: 100,
+              color: Colors.grey,
+              child: const Icon(Icons.error),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _images.remove(file);
+              });
+            },
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(4),
+              child: const Icon(
+                Icons.close,
+                size: 16,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
